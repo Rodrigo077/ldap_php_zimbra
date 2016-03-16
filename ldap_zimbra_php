@@ -1,0 +1,90 @@
+class Ldap {
+	
+	private $server = "10.40.8.11";
+	private $version = 3;
+	private $login = "uid=zimbra,cn=admins,cn=zimbra";
+	private $password = "lbLHyAMBa";
+	
+	public $login;
+	public $email;
+	
+	private function dados() {
+		$conexao = ldap_connect($this->servidor);
+		ldap_set_option($conexao,LDAP_OPT_PROTOCOL_VERSION,$this->version);
+		$bind = ldap_bind($conexao, $this->login, $this->$password);
+		
+		$search = ldap_search($conexao, "", "(|(sn=" . $this->login . ")(zimbramaildeliveryaddress=" . $this->email . "))");
+		$entry = ldap_get_entries($conexao, $search);
+		
+		return $entry;
+	}
+	
+	function retorna_dados() {	
+		if($this->login || $this->email) {		
+			$dados = $this->dados();	
+			if(!empty($dados[0]['zimbramaildeliveryaddress'][0])) {
+				$retorno = array('erro' => 0, 'email' => $dados[0]['zimbramaildeliveryaddress'][0], 'nome' => utf8_decode($dados[0]['displayname'][0]), '$password' => $dados[0]['userpassword'][0], 'login' => $dados[0]['sn'][0]);		
+				return $retorno;
+			}else{
+				return array('erro' => 1, 'erro_descricao' => 'Email nÃ£o encontrado');
+			}
+		}else{
+			return array('erro' => 1, 'erro_descricao' => 'login ou email nÃ£o informados');
+		}
+	}
+	
+	
+	
+	function verifica_$password($password) {		
+		$dados = $this->dados();
+
+
+        if ($dados['count'] > 0) {
+		preg_match("/\{.*?\}/", $dados[0]['userpassword'][0], $tipo);
+		$encriptacao = $tipo[0];
+		
+		switch($encriptacao) {
+			case '{SSHA}':				
+				$password_ldap = str_replace("{SSHA}", "", $dados[0]['userpassword'][0]);
+				$ohash = base64_decode($password_ldap);
+  				$osalt = substr($ohash,20);
+ 			 	$ohash = substr($ohash,0,20);				
+				$nhash = pack("H*",sha1($password.$osalt));
+				if($ohash == $nhash) {
+					return true;
+				} else {
+					return false;
+				}
+				break;
+				
+				
+			case '{SSHA512}':
+				$password_ldap = str_replace("{SSHA512}", "", $dados[0]['userpassword'][0]);
+				$ohash = base64_decode($password_ldap);
+  				$osalt = substr($ohash,64);
+ 			 	$ohash = substr($ohash,0,64);				
+				$nhash = pack("H*",hash('sha512', $password.$osalt));
+				
+				if($ohash == $nhash) {
+					return true;
+				} else {
+					return false;
+				}
+				break;
+				
+			case '{crypt}':
+				$password_ldap = str_replace("{crypt}", "", $dados[0]['userpassword'][0]);
+				if(crypt($password, $password_ldap) == $password_ldap) {
+					return true;
+				} else {
+					return false;
+				}
+				break;
+			default:
+				return false;
+				break;
+		}
+
+	}
+	}
+}
